@@ -1129,7 +1129,7 @@ describe('TavernHelperRegexAdapter', () => {
 - **平台分析**：[`platform.md`](./platform.md) - TavernHelper 正则能力
 - **包装层**：[`wrapper.md`](./wrapper.md) - 统一正则API
 - **应用层**：[`application.md`](./application.md) - Vue集成
-- **RFC规范**：[`CHARACTER_API_RFC.md`](../../CHARACTER_API_RFC.md#_4-8-正则系统-characterapi-regex-⭐⭐)
+- **RFC规范**：[`CHARACTER_API_RFC.md`](/CHARACTER_API_RFC#_4-8-正则系统-characterapi-regex-⭐⭐)
 
 ---
 

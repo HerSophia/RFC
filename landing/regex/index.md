@@ -21,7 +21,7 @@ layout: doc
 
 ## 🎯 模块概述
 
-正则系统模块 ([`CharacterAPI.regex`](../../CHARACTER_API_RFC.md#_4-8-正则系统-characterapi-regex-⭐⭐)) 提供统一的正则表达式管理接口，用于文本的匹配、替换和过滤操作。
+正则系统模块 ([`CharacterAPI.regex`](/CHARACTER_API_RFC#_4-8-正则系统-characterapi-regex-⭐⭐)) 提供统一的正则表达式管理接口，用于文本的匹配、替换和过滤操作。
 
 ### ✅ 核心特性
 
@@ -397,7 +397,7 @@ await CharacterAPI.regex.addRegex({
 ## 🔗 相关文档
 
 ### 核心文档
-- [RFC 主文档 - 正则系统章节](../../CHARACTER_API_RFC.md#_4-8-正则系统-characterapi-regex-⭐⭐)
+- [RFC 主文档 - 正则系统章节](/CHARACTER_API_RFC#_4-8-正则系统-characterapi-regex-⭐⭐)
 - [TavernHelper 正则文档](../../resource/TAVERNHELPER.md#酒馆正则)
 
 ### 模块文档

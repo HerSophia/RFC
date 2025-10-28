@@ -1193,7 +1193,7 @@ if (!validation.valid) {
 - **适配层**：[`adapter.md`](./adapter.md) - 正则适配器实现
 - **平台层**：[`platform.md`](./platform.md) - TavernHelper正则能力
 - **应用层**：[`application.md`](./application.md) - Vue组件集成
-- **RFC规范**：[`CHARACTER_API_RFC.md`](../../CHARACTER_API_RFC.md#_4-8-正则系统-characterapi-regex-⭐⭐)
+- **RFC规范**：[`CHARACTER_API_RFC.md`](/CHARACTER_API_RFC#_4-8-正则系统-characterapi-regex-⭐⭐)
 
 ---
 
