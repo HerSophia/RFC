@@ -277,8 +277,8 @@ watchVariable('player', (newValue, oldValue) => {
 ### 相关资源
 
 - 教程章节：后续补充
-- RFC总览：[CHARACTER_API_RFC](../CHARACTER_API_RFC.md)
-- 生成模块索引：[generation](../landing/generation/index.md)
+- RFC总览：[CHARACTER_API_RFC](/CHARACTER_API_RFC)
+- 生成模块索引：[generation](/landing/generation/)
 
 ---
 

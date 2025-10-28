@@ -947,11 +947,11 @@ export const variableEvents = new VariableEventManager();
 
 ## 🔗 相关文档
 
-- **RFC总览**：[CharacterAPI RFC 规范](../CHARACTER_API_RFC.md)
+- **RFC总览**：[CharacterAPI RFC 规范](/CHARACTER_API_RFC)
 - **适配器实现**：[变量适配器设计](adapter.md)
 - **包装层设计**：[变量包装层实现](wrapper.md)
 - **应用层指南**：[变量应用层开发](application.md)
-- **RFC 核心文档**：[CharacterAPI RFC](../CHARACTER_API_RFC.md)
+- **RFC 核心文档**：[CharacterAPI RFC](/CHARACTER_API_RFC)
 
 ---
 

@@ -535,7 +535,7 @@ STREAM_TOKEN_*: (content: string, generation_id: string) => void
 ### 🔗 相关资源
 
 - **平台文档**：[`TAVERNHELPER.md`](../../resource/TAVERNHELPER.md)
-- **RFC规范**：[`CHARACTER_API_RFC.md`](../../CHARACTER_API_RFC.md#_4-2-事件系统-characterapi-events-⭐⭐⭐)
+- **RFC规范**：[`CHARACTER_API_RFC.md`](/CHARACTER_API_RFC#_4-2-事件系统-characterapi-events-⭐⭐⭐)
 - **适配层设计**：[`adapter.md`](./adapter.md)
 - **包装层实现**：[`wrapper.md`](./wrapper.md)
 

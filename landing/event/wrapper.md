@@ -1009,7 +1009,7 @@ const unsubscribe = onBatched(
 - **适配层**：[`adapter.md`](./adapter.md) - 事件适配器实现
 - **平台层**：[`platform.md`](./platform.md) - TavernHelper事件能力
 - **应用层**：[`application.md`](./application.md) - Vue组件集成
-- **RFC规范**：[`CHARACTER_API_RFC.md`](../../CHARACTER_API_RFC.md#_4-2-事件系统-characterapi-events-⭐⭐⭐)
+- **RFC规范**：[`CHARACTER_API_RFC.md`](/CHARACTER_API_RFC#_4-2-事件系统-characterapi-events-⭐⭐⭐)
 
 ---
 

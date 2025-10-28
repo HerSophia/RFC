@@ -949,7 +949,7 @@ function throttleEvent(
 - **平台分析**：[`platform.md`](./platform.md) - TavernHelper 事件能力
 - **包装层**：[`wrapper.md`](./wrapper.md) - 统一事件API
 - **应用层**：[`application.md`](./application.md) - Vue集成
-- **RFC规范**：[`CHARACTER_API_RFC.md`](../../CHARACTER_API_RFC.md#_4-2-事件系统-characterapi-events-⭐⭐⭐)
+- **RFC规范**：[`CHARACTER_API_RFC.md`](/CHARACTER_API_RFC#_4-2-事件系统-characterapi-events-⭐⭐⭐)
 
 ---
 

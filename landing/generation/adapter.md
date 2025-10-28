@@ -1,6 +1,6 @@
 # 🎯 四层模型·平台适配层（Generation Adapter）
 
-> **核心目标**：提供可直接落地的适配器设计与实现合同（SPI），将各平台原生生成能力映射为统一的 [`CharacterAPI.generation`](../index.md#generation-api) 接口与事件语义，并支持能力协商、降级与资源释放。
+> **核心目标**：提供可直接落地的适配器设计与实现合同（SPI），将各平台原生生成能力映射为统一的 [`CharacterAPI.generation`](/landing/generation/#generation-api) 接口与事件语义，并支持能力协商、降级与资源释放。
 
 ---
 
@@ -963,11 +963,11 @@ export const CustomPlatformAdapterFactory: GenerationAdapterFactory = {
 
 ## 📚 相关文档
 
-- 📖 [**生成系统总览**](../index.md) - 四层架构完整介绍
+- 📖 [**生成系统总览**](/landing/generation/) - 四层架构完整介绍
 - 🏗️ [**平台层设计**](./platform.md) - 平台特定实现指南
 - 🎛️ [**包装层设计**](./wrapper.md) - 中间件与增强功能
 - 🚀 [**应用层设计**](./application.md) - 上层API与集成方案
-- 📋 [**CharacterAPI RFC**](../CHARACTER_API_RFC.md) - 规范参考文档
+- 📋 [**CharacterAPI RFC**](/CHARACTER_API_RFC) - 规范参考文档
 
 ---
 

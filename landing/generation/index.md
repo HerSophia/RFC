@@ -257,7 +257,7 @@ sequenceDiagram
 
 ### 📚 **核心文档**
 - [CharacterAPI RFC](/CHARACTER_API_RFC) - 整体架构与接口规范
-- [生成模块索引](/generation/) - 分步实现与导航
+- [生成模块索引](/landing/generation/) - 分步实现与导航
 
 ### 🛠️ **实现参考**
 - [包装层实现](./wrapper.md) - 统一接口与事件处理
