@@ -132,8 +132,6 @@ window.platformAndInformation = function(): PlatformInfo {
 
 各平台需要实现`window.platformAndInformation()`方法，CharacterAPI库在初始化时首先调用此方法识别宿主环境。
 
-> 📖 **完整实现参考**：[附录A - 平台识别实现](#附录a-平台识别实现)
-
 ## 4. API 规范详述
 
 > **架构说明**：`CharacterAPI`为全局对象，按功能模块化组织
@@ -146,11 +144,60 @@ window.platformAndInformation = function(): PlatformInfo {
 #### ✅ 核心特性
 
 - ✅ 统一的 get/set/update 接口
-- ✅ 多作用域支持（chat/global/character/message/script）
+- ✅ 多作用域支持（chat/global/character/message/script/default）
 - ✅ 批量操作与事务支持
 - ✅ 数据校验与类型安全
 - ✅ 自动错误处理与重试
 - ✅ 变量监听与响应式更新
+- ✅ 智能缓存策略（LRU 缓存）
+- ✅ 平台能力自动检测与协商
+- ✅ 事件驱动的状态同步
+
+#### 🏗️ 四层架构设计
+
+变量管理模块遵循标准的四层架构，每层职责清晰：
+
+```mermaid
+graph TB
+    subgraph "应用层 Application Layer"
+        A1[Vue组件] --> A2[Pinia Store]
+        A2 --> A3[响应式状态管理]
+    end
+    
+    subgraph "包装层 Wrapper Layer ⭐⭐⭐"
+        W1[统一API接口] --> W2[错误处理与重试]
+        W2 --> W3[状态机管理]
+        W3 --> W4[事件派发]
+    end
+    
+    subgraph "适配层 Adapter Layer ⭐⭐⭐"
+        AD1[能力协商] --> AD2[平台桥接]
+        AD2 --> AD3[事件归一化]
+    end
+    
+    subgraph "平台层 Platform Layer"
+        P1[TavernHelper API]
+        P2[SillyTavern API]
+        P3[其他平台 API]
+    end
+    
+    A3 --> W1
+    W4 --> AD1
+    AD3 --> P1
+    AD3 --> P2
+    AD3 --> P3
+    
+    style W1 fill:#e1f5fe
+    style AD1 fill:#e8f5e8
+    style P1 fill:#fff3e0
+```
+
+**层次职责说明**：
+
+- **应用层** ⭐⭐：Vue/Pinia 集成，响应式状态管理（[详见应用层文档](./landing/variable/application.md)）
+- **包装层** ⭐⭐⭐：统一 API 接口、错误处理、缓存策略、事件派发（[详见包装层文档](./landing/variable/wrapper.md)）
+- **适配层** ⭐⭐⭐：平台差异封装、能力协商、事件桥接（[详见适配层文档](./landing/variable/adapter.md)）
+- **平台层** ⭐⭐：TavernHelper、LocalStorage 等原生 API（[详见平台层文档](./landing/variable/platform.md)）
 
 #### 🔧 核心类型定义
 
@@ -162,7 +209,8 @@ enum VariableScope {
   GLOBAL = 'global',       // 全局变量
   CHARACTER = 'character', // 角色变量
   MESSAGE = 'message',     // 消息级别变量
-  SCRIPT = 'script'        // 脚本变量
+  SCRIPT = 'script',       // 脚本变量
+  DEFAULT = 'default'      // 默认作用域（兜底）
 }
 ```
 
@@ -190,6 +238,7 @@ interface VariableResult<T = any> {
     timestamp: number;
     operation: 'get' | 'set' | 'delete' | 'batch';
     affectedKeys: string[];
+    platform: string;      // 平台标识
   };
 }
 ```
@@ -205,6 +254,7 @@ interface VariableCapabilities {
       character: boolean;
       message: boolean;
       script: boolean;
+      default?: boolean;   // 默认作用域支持
     };
     features: {
       batch: boolean;        // 批量操作
@@ -213,37 +263,139 @@ interface VariableCapabilities {
       encryption: boolean;   // 数据加密
       ttl: boolean;         // 生存时间
       watch: boolean;       // 变量监听
+      persistence: boolean; // 持久化能力
+      async: boolean;       // 异步操作
     };
   };
 }
 ```
 
-#### 🔧 接口概览
+#### 🔧 包装层接口概览
+
+##### 核心管理器 (VariableManager) ⭐⭐⭐
 
 ```typescript
-interface VariableManager {
-  /** 获取单个或多个变量 */
-  get<T>(keys: string | string[], scope?: VariableScope): Promise<VariableResult<T>>;
-
-  /** 更新变量（支持深度合并） */
-  update(variables: Record<string, any>, options?: VariableConfig): Promise<VariableResult>;
-
-  /** 批量操作 */
-  batch(operations: VariableOperation[]): Promise<VariableResult[]>;
-
-  /** 监听变量变化 */
-  watch(key: string, callback: (newValue: any, oldValue: any) => void): () => void;
-
-  /** 能力发现 */
-  getCapabilities?(): Promise<VariableCapabilities>;
+export class VariableManager {
+  // 基础操作
+  async get(key: string, scope?: VariableScope): Promise<string | undefined>
+  async set(key: string, value: string, scope?: VariableScope): Promise<void>
+  async delete(key: string, scope?: VariableScope): Promise<void>
+  async exists(key: string, scope?: VariableScope): Promise<boolean>
+  
+  // 批量操作
+  async getMany(keys: string[], scope?: VariableScope): Promise<Record<string, string | undefined>>
+  async setMany(variables: Record<string, string>, scope?: VariableScope): Promise<void>
+  async deleteMany(keys: string[], scope?: VariableScope): Promise<void>
+  
+  // 高级操作
+  async getAll(scope?: VariableScope): Promise<Record<string, string>>
+  async clear(scope?: VariableScope): Promise<void>
+  async getKeys(scope?: VariableScope): Promise<string[]>
+  
+  // 缓存管理
+  clearCache(): void
+  getCacheStats(): { size: number; maxSize: number }
+  
+  // 事件系统
+  addEventListener(type: string, listener: EventListener): void
+  removeEventListener(type: string, listener: EventListener): void
+  
+  // 平台信息
+  getPlatform(): string
+  getCapabilities(): any
+  getSupportedScopes(): VariableScope[]
 }
+```
 
-interface VariableOperation {
-  type: 'get' | 'set' | 'delete';
-  key: string;
-  value?: any;
-  scope?: VariableScope;
+##### 类型安全封装 (TypedVariableManager) ⭐⭐⭐
+
+提供基于 schema 的类型安全、验证和转换功能：
+
+```typescript
+const gameSchema = {
+  playerName: {
+    type: 'string' as const,
+    required: true,
+    validator: (value: string) => value.length > 0
+  },
+  playerLevel: {
+    type: 'number' as const,
+    default: 1,
+    validator: (value: number) => value >= 1 && value <= 100
+  }
+};
+
+const gameVars = new TypedVariableManager(gameSchema);
+await gameVars.set('playerName', '张三');     // ✅ 类型正确
+const level = await gameVars.get('playerLevel'); // number 类型
+```
+
+##### 响应式封装 (ReactiveVariableManager) ⭐⭐
+
+Vue 响应式系统集成（可选扩展）：
+
+```typescript
+const reactiveVars = new ReactiveVariableManager();
+
+// 响应式变量
+const playerName = reactiveVars.useVariable('playerName', VariableScope.CHAT, '未命名');
+
+// 双向绑定
+const playerGold = reactiveVars.useTwoWayBinding('playerGold', VariableScope.CHAT, 0);
+
+// 计算属性
+const playerPower = reactiveVars.useComputedVariable('playerPower', () => {
+  return playerLevel.value * 100;
+});
+```
+
+#### 🔧 适配层接口概览
+
+##### 适配器标准合同 (VariableAdapter) ⭐⭐⭐
+
+```typescript
+export interface VariableAdapter {
+  readonly platform: string;
+  readonly capabilities: PlatformCapabilities;
+  
+  // 生命周期
+  initialize(): Promise<void>;
+  dispose(): Promise<void>;
+  
+  // 基础操作
+  get(key: string, scope?: VariableScope): Promise<VariableResult<string>>;
+  set(key: string, value: string, scope?: VariableScope): Promise<VariableResult<void>>;
+  delete(key: string, scope?: VariableScope): Promise<VariableResult<void>>;
+  exists(key: string, scope?: VariableScope): Promise<VariableResult<boolean>>;
+  
+  // 批量操作
+  getMany(keys: string[], scope?: VariableScope): Promise<BatchResult<string>>;
+  setMany(variables: Record<string, string>, scope?: VariableScope): Promise<BatchResult<void>>;
+  deleteMany(keys: string[], scope?: VariableScope): Promise<BatchResult<void>>;
+  
+  // 高级操作
+  getAll(scope?: VariableScope): Promise<VariableResult<Record<string, string>>>;
+  clear(scope?: VariableScope): Promise<VariableResult<void>>;
+  getKeys(scope?: VariableScope): Promise<VariableResult<string[]>>;
+  
+  // 能力查询
+  getSupportedScopes(): VariableScope[];
+  isScopeSupported(scope: VariableScope): boolean;
 }
+```
+
+##### 工厂模式 (AdapterFactory) ⭐⭐⭐
+
+```typescript
+// 自动检测最佳适配器
+const adapter = adapterFactory.create();
+await adapter.initialize();
+
+// 指定平台适配器
+const tavernAdapter = adapterFactory.create('tavernHelper');
+
+// 查询可用平台
+const platforms = adapterFactory.getRegisteredPlatforms();
 ```
 
 #### 🚀 使用示例
@@ -255,34 +407,59 @@ interface VariableOperation {
 await CharacterAPI.init();
 
 // 获取变量
-const result = await CharacterAPI.variable.get<{ name: string; level: number }>('player');
-if (result.success) {
-  console.log('玩家数据:', result.data);
+const result = await CharacterAPI.state.get<string>('playerName', 'character');
+if (result !== null) {
+  console.log('玩家名称:', result);
 }
 
-// 更新变量
-await CharacterAPI.variable.update({
-  player: { name: '张三', level: 10 }
-}, { scope: VariableScope.CHAT, backup: true });
+// 设置变量
+await CharacterAPI.state.set('playerLevel', 10, 'character');
 
-// 批量操作
-await CharacterAPI.variable.batch([
-  { type: 'set', key: 'hp', value: 100 },
-  { type: 'set', key: 'mp', value: 50 },
-  { type: 'delete', key: 'temp_data' }
-]);
+// 批量更新
+await CharacterAPI.state.update({
+  playerGold: 2000,
+  playerExp: 1500
+}, 'character');
 ```
 
-##### 变量监听
+##### 高级用法（使用包装层）
 
 ```typescript
-// 监听变量变化
-const unwatch = CharacterAPI.variable.watch('player', (newValue, oldValue) => {
-  console.log('玩家数据变化:', { newValue, oldValue });
+import { VariableManager, TypedVariableManager, VariableScope } from '@/wrappers/variable-manager';
+
+// 使用类型安全管理器
+const typedManager = new TypedVariableManager(gameSchema, {
+  enableCache: true,
+  enableEvents: true
 });
 
-// 取消监听
-unwatch();
+await typedManager.initialize();
+
+// 类型安全操作
+await typedManager.set('playerName', '张三');
+const name = await typedManager.get('playerName'); // string 类型
+```
+
+##### Vue 组件集成
+
+```vue
+<script setup>
+import { useVariableStore } from '@/stores/variableStore';
+import { computed } from 'vue';
+
+const store = useVariableStore();
+
+// 从 Store 读取
+const playerName = computed(() => store.getValue('player.name', 'character') ?? '未命名');
+const playerLevel = computed(() => Number(store.getValue('player.level', 'character') ?? 1));
+</script>
+
+<template>
+  <div>
+    <div>玩家：{{ playerName }}</div>
+    <div>等级：{{ playerLevel }}</div>
+  </div>
+</template>
 ```
 
 #### 🔄 事件系统集成
@@ -307,33 +484,73 @@ CharacterAPI.events.on('variable:error', (error) => {
 });
 ```
 
-#### 🎯 四层架构设计
+**事件负载结构**：
 
-变量管理模块遵循标准的四层架构：
-
-- **应用层**：Vue/Pinia 集成，响应式状态管理
-- **包装层** ⭐⭐⭐：统一 API 接口、错误处理、状态管理
-- **适配层** ⭐⭐⭐：平台差异封装、能力协商、事件桥接
-- **平台层**：TavernHelper、SillyTavern 等原生 API
-
-> 📖 **详细文档参考**：[变量操作完整规范](./landing/variable/index.md)
+```typescript
+interface StateChangedPayload {
+  scope: 'chat' | 'global' | 'character' | 'message' | 'script';
+  key: string;
+  oldValue?: any;
+  newValue?: any;
+  metadata: {
+    operation: 'get' | 'set' | 'delete' | 'batch' | 'clear';
+    timestamp: number;
+    affectedKeys: string[];
+    platform: string;
+  };
+}
+```
 
 #### ⚠️ 平台兼容性
 
-- **TavernHelper**：完整支持所有特性
-- **SillyTavern**：部分特性需要降级（如 message/script 作用域）
-- **其他平台**：通过适配器扩展支持
+| 平台 | 作用域支持 | 批量操作 | 持久化 | 类型检查 | 推荐度 |
+|------|-----------|---------|--------|---------|--------|
+| **TavernHelper** | ✅ 完整支持 | ✅ 原生支持 | ✅ 自动持久化 | ✅ 原生支持 | ⭐⭐⭐ |
+| **LocalStorage** | ⚠️ 部分支持 | ❌ 模拟实现 | ✅ 原生支持 | ❌ 不支持 | ⭐⭐ |
+| **其他平台** | 🔧 通过适配器扩展 | 🔧 可配置 | 🔧 可配置 | 🔧 可配置 | ⭐ |
+
+**能力降级策略**：
+
+| 不支持的能力 | 降级策略 | 日志记录 |
+|-------------|----------|----------|
+| **批量操作** | 循环单次操作 | 记录降级原因和性能影响 |
+| **特定作用域** | 使用命名空间前缀 | 记录作用域映射关系 |
+| **验证** | 跳过验证步骤 | 警告数据一致性风险 |
+| **加密** | 明文存储 | 警告安全风险 |
 
 #### 💡 最佳实践
 
+**性能优化**：
 - ✅ 优先使用批量操作提升性能
-- ✅ 合理使用缓存机制
+- ✅ 合理使用缓存机制（LRU 策略）
 - ✅ 避免频繁的全量获取
+- ✅ 使用 `getMany` 代替多次 `get` 调用
+
+**安全建议**：
 - ✅ 敏感数据启用加密选项
 - ✅ 合理设置 TTL 避免数据泄露
 - ✅ 使用数据校验防止注入
+- ✅ 在包装层进行统一的数据验证
 
-> 📖 **完整实现参考**：[附录B - 变量管理实现](#附录b-变量管理实现)
+**架构建议**：
+- ✅ 生产环境使用 `TypedVariableManager`（类型安全）
+- ✅ Vue 项目使用 Pinia Store + 事件桥接模式
+- ✅ 确保调用 `initialize()` 和 `dispose()` 生命周期方法
+- ✅ 使用工厂模式自动选择最佳适配器
+
+#### 📚 详细文档
+
+**核心实现文档**：
+- [`index.md`](./landing/variable/index.md) - 变量模块总览与快速开始
+- [`wrapper.md`](./landing/variable/wrapper.md) ⭐⭐⭐ - 包装层实现（核心管理器、类型安全、响应式）
+- [`adapter.md`](./landing/variable/adapter.md) ⭐⭐⭐ - 适配层实现（SPI 合同、平台适配器、工厂模式）
+- [`platform.md`](./landing/variable/platform.md) ⭐⭐ - 底层平台特性（能力对比、平台检测）
+
+**应用集成文档**：
+- [`application.md`](./landing/variable/application.md) ⭐⭐ - 应用层集成（业务场景、组件范例）
+- [`advanced-application.md`](./landing/variable/advanced-application.md) ⭐ - 高级应用（Vue + Pinia 深度集成）
+
+> 💡 **快速上手**：建议从 [`index.md`](./landing/variable/index.md) 开始，了解整体架构后再深入具体层次的文档。
 
 ### 4.1.1 LLM变量 (`CharacterAPI.llmVariable`) ⭐⭐
 
@@ -342,25 +559,51 @@ CharacterAPI.events.on('variable:error', (error) => {
 
 #### ✅ 核心特性
 
-- ✅ 解析LLM输出的结构化指令（`_.set()`, `_.get()`, `_.merge()` 等）
+- ✅ 解析LLM输出的结构化指令（支持JSON和MVU两种格式）
+- ✅ 规则驱动设计（通过世界书向LLM注入操作规则）
 - ✅ 安全的变量路径验证
 - ✅ JavaScript回调函数支持
 - ✅ 自动初始化系统
 - ✅ 完全基于 [`CharacterAPI.variable`](#_4-1-变量管理-characterapi-variable-⭐⭐⭐) 构建
 
-#### 🔧 核心类型定义
+#### 📋 指令格式规范
 
-##### 指令格式
+##### **推荐：JSON格式** ✨（黄金标准）
 
-```typescript
-// LLM输出的指令格式
-_.set('path', oldValue, newValue); // reason
-_.get('path');
-_.delete('path');
-_.merge('path', oldObj, newProps);
-_.push('arrayPath', item);
-_.callback('functionName', ...args);
+**为什么选择JSON？**
+- ✅ **解析简单**：原生`JSON.parse()`，零解析成本
+- ✅ **类型明确**：支持所有JSON类型，无需推断
+- ✅ **结构清晰**：易于理解和调试
+- ✅ **LLM友好**：LLM最擅长生成JSON格式
+
+```json
+// 单条指令
+{
+  "op": "assign",
+  "path": ["player", "level"],
+  "value": 2,
+  "old": 1,
+  "reason": "升级"
+}
+
+// 批量指令
+[
+  {"op": "assign", "path": ["player", "level"], "value": 2},
+  {"op": "assign", "path": ["player", "hp"], "value": 120},
+  {"op": "callback", "path": ["showMessage"], "value": ["恭喜升级！"]}
+]
 ```
+
+**支持的操作类型**：
+- `assign` - 赋值操作
+- `get` - 获取值
+- `delete` - 删除
+- `merge` - 深度合并对象
+- `push` - 数组追加
+- `callback` - 触发回调函数
+
+
+#### 🔧 核心类型定义
 
 ##### 解析结果
 
@@ -378,13 +621,32 @@ interface ParseResult {
 }
 
 interface Operation {
-  type: 'set' | 'get' | 'delete' | 'merge' | 'push' | 'callback';
+  type: 'assign' | 'get' | 'delete' | 'merge' | 'push' | 'pop' | 'callback';
   path: string;
   oldValue?: any;
   newValue?: any;
   reason?: string;
   success: boolean;
   error?: string;
+  result?: any;
+}
+```
+
+##### 初始化规则
+
+```typescript
+interface InitRule {
+  path: string;
+  value: any;
+  condition: 'always' | 'once' | 'missing' | ((current: any) => boolean);
+  scope?: VariableScope;
+}
+
+interface InitResult {
+  success: boolean;
+  initialized: string[];
+  skipped: string[];
+  errors: InitError[];
 }
 ```
 
@@ -401,7 +663,7 @@ interface LLMVariableManager {
   /** 配置初始化规则 */
   setInitRules(rules: InitRule[]): Promise<void>;
   
-  /** 执行初始化 */
+  /** 手动触发初始化 */
   initialize(): Promise<InitResult>;
   
   /** 获取解析统计信息 */
@@ -411,15 +673,35 @@ interface LLMVariableManager {
 
 #### 🚀 使用示例
 
-##### 基础使用
+##### 基础使用（JSON格式）
 
 ```typescript
-// LLM输出包含变量操作指令
+// LLM输出（JSON格式）
 const llmOutput = `
 好的，我已经记录下来了。
-_.set('player.name', null, '张三'); // 设置玩家名字
-_.set('player.level', null, 1); // 初始等级
-_.set('player.hp', null, 100); // 初始生命值
+
+\`\`\`json
+[
+  {
+    "op": "assign",
+    "path": ["player", "name"],
+    "value": "张三",
+    "reason": "设置玩家名字"
+  },
+  {
+    "op": "assign",
+    "path": ["player", "level"],
+    "value": 1,
+    "reason": "初始等级"
+  },
+  {
+    "op": "assign",
+    "path": ["player", "hp"],
+    "value": 100,
+    "reason": "初始生命值"
+  }
+]
+\`\`\`
 `;
 
 // 解析并执行
@@ -429,42 +711,74 @@ const result = await CharacterAPI.llmVariable.parse(llmOutput);
 console.log('操作结果:', result.operations);
 ```
 
-##### 回调函数
+##### 回调函数与初始化
 
 ```typescript
-// 注册回调
-CharacterAPI.llmVariable.registerCallback('onLevelUp', (player) => {
-  console.log(`恭喜升级！当前等级：${player.level}`);
+// 1. 注册回调函数
+CharacterAPI.llmVariable.registerCallback('onPlayerLevelUp', (player) => {
+  console.log(`玩家升级到 ${player.level} 级！`);
 });
 
-// LLM可以调用
-// _.callback('onLevelUp', {level: 6});
+CharacterAPI.llmVariable.registerCallback('showMessage', (msg) => {
+  alert(msg);
+});
+
+// 2. 设置初始化规则
+await CharacterAPI.llmVariable.setInitRules([
+  {
+    path: 'player',
+    value: { name: '未命名', level: 1, hp: 100 },
+    condition: 'missing'  // 变量不存在时才初始化
+  },
+  {
+    path: 'game.started',
+    value: true,
+    condition: 'once'  // 只初始化一次
+  }
+]);
+
+// 3. 手动初始化
+await CharacterAPI.llmVariable.initialize();
+
+// 4. LLM输出会自动解析
+// LLM可以使用回调：
+// {"op":"callback","path":["onPlayerLevelUp"],"value":[{"level":6}]}
 ```
 
 #### 🏗️ 架构关系
 
-```typescript
-// llmVariable 完全依赖 variable 模块
-CharacterAPI.llmVariable → CharacterAPI.variable → PlatformAdapter
-
-// 所有变量操作都通过 variable API 完成
-_.set('player.hp', 100, 80)
-  → llmVariable.parse()
-  → variable.update({player: {hp: 80}})
-  → PlatformAdapter.set()
+```mermaid
+graph TB
+    A[LLM输出] --> B[llmVariable.parse]
+    B --> C[指令解析]
+    C --> D[安全验证]
+    D --> E[variable.update]
+    E --> F[平台适配器]
+    F --> G[实际存储]
+    
+    H[世界书系统] -.规则注入.-> A
+    
+    style B fill:#fff3e0
+    style E fill:#e1f5fe
+    style H fill:#e8f5e8
 ```
 
 **关键设计**：
 - ✅ **不重复造轮**：复用 [`variable`](#_4-1-变量管理-characterapi-variable-⭐⭐⭐) 的所有能力
 - ✅ **专注核心**：只做"LLM指令解析"这一增量功能
 - ✅ **透明传递**：所有 [`variable`](#_4-1-变量管理-characterapi-variable-⭐⭐⭐) 的配置选项都可使用
+- ✅ **规则驱动**：通过世界书系统向LLM注入操作规则
 
 #### 🔄 事件系统集成
 
 ```typescript
-// LLM指令解析事件
+// LLM指令解析完成事件
 CharacterAPI.events.on('llm:instruction:parsed', (payload) => {
-  console.log('指令解析完成:', payload.operations);
+  console.log('指令解析完成:', {
+    operations: payload.operations.length,
+    errors: payload.errors.length,
+    parseTime: payload.metadata.parseTime
+  });
 });
 
 // 指令执行事件
@@ -472,80 +786,203 @@ CharacterAPI.events.on('llm:instruction:executed', (payload) => {
   console.log('指令执行:', payload.operation);
 });
 
-// 初始化事件
+// 初始化完成事件
 CharacterAPI.events.on('llm:initialized', (payload) => {
-  console.log('变量初始化完成:', payload);
+  console.log('变量初始化完成:', {
+    initialized: payload.initialized,
+    skipped: payload.skipped
+  });
+});
+
+// 错误事件
+CharacterAPI.events.on('llm:instruction:error', (payload) => {
+  console.error('指令执行错误:', payload.error);
 });
 ```
 
 #### ⚠️ 平台兼容性
 
-- **TavernHelper**：完整支持（通过世界书注入规则）
-- **SillyTavern**：完整支持（通过世界书注入规则）
-- **其他平台**：需要世界书或类似机制支持
+| 平台 | 世界书支持 | 规则注入 | 推荐度 |
+|------|-----------|---------|--------|
+| **MVU** | ✅ 完整支持 | ✅ 原生支持 | ⭐⭐⭐ |
+| **其他平台** | ⚠️ 需确认 | 🔧 适配器扩展 | ⭐⭐ |
 
 #### 💡 MVU机制传承
 
-本模块传承自"酒馆助手"的MagVarUpdate (MVU)工具，保持其核心理念：
+本模块传承自MagVarUpdate (MVU)工具，保持其核心理念：
 - ✅ **规则驱动**：通过世界书向LLM注入规则
 - ✅ **结构化输出**：LLM按格式输出变量操作指令
 - ✅ **自动解析**：脚本自动解析并执行指令
 
 同时进行了全面增强：
+- ✅ **双格式支持**：JSON（推荐）+ MVU（兼容）
 - ✅ **跨平台支持**：统一的适配层
-- ✅ **类型安全**：TypeScript类型定义
+- ✅ **类型安全**：完整TypeScript类型定义
 - ✅ **完整集成**：融入CharacterAPI体系
 - ✅ **事件驱动**：完整的事件系统
+- ✅ **初始化系统**：自动化变量初始化
 
-> 📖 **详细文档参考**：[LLM变量完整规范](./landing/llm-variable/index.md)
+#### 📚 详细文档
+
+**核心实现文档**：
+- [`index.md`](./landing/llm-variable/index.md) - LLM变量模块总览与快速开始
+- [`wrapper.md`](./landing/llm-variable/wrapper.md) ⭐⭐⭐ - 包装层实现（指令解析、回调系统）
+- [`adapter.md`](./landing/llm-variable/adapter.md) ⭐⭐⭐ - 规则注入系统（世界书集成）
+- [`platform.md`](./landing/llm-variable/platform.md) ⭐⭐ - 平台特性分析（世界书能力、MVU机制）
+
+**应用集成文档**：
+- [`application.md`](./landing/llm-variable/application.md) ⭐⭐ - 应用层集成（Vue/Pinia集成、UI响应式更新）
+- [`advanced-application.md`](./landing/llm-variable/advanced-application.md) ⭐ - 高级应用（复杂场景、性能优化）
+
+> 💡 **快速上手**：建议从 [`index.md`](./landing/llm-variable/index.md) 开始，了解整体架构后再深入具体实现文档。
 
 ### 4.2 事件系统 (`CharacterAPI.events`) ⭐⭐⭐
 
-> **职责**：标准事件总线，统一平台事件与模块间通信
+> **职责**：标准事件总线，统一平台事件与模块间通信，支持生成过程和流式token事件
 > **必要性**：**绝对必需** - 模块解耦和异步通信的基础设施
 
 #### ✅ 核心特性
 
 - ✅ 标准化事件名称和负载格式
-- ✅ 支持生成过程和流式token事件
+- ✅ 支持生成过程事件（started/progress/ended/error）
+- ✅ 支持流式token事件（incremental/full）
 - ✅ 事件监听器的生命周期管理
 - ✅ 自定义事件派发机制
+- ✅ 事件优先级与错误隔离
+- ✅ 完整的事件链路追踪
 
-#### 🔧 接口概览
+#### 🏗️ 四层架构设计
+
+事件系统遵循标准的四层架构，每层职责清晰：
+
+```mermaid
+graph TB
+    subgraph "应用层 Application Layer"
+        A1[Vue组件事件监听] --> A2[事件驱动UI更新]
+    end
+    
+    subgraph "包装层 Wrapper Layer ⭐⭐⭐"
+        W1[EventManager] --> W2[监听器管理]
+        W2 --> W3[事件派发]
+    end
+    
+    subgraph "适配层 Adapter Layer ⭐⭐⭐"
+        AD1[事件归一化] --> AD2[平台桥接]
+    end
+    
+    subgraph "平台层 Platform Layer"
+        P1[TavernHelper事件API]
+    end
+    
+    A2 --> W1
+    W3 --> AD1
+    AD2 --> P1
+    
+    style W1 fill:#e1f5fe
+    style AD1 fill:#e8f5e8
+    style P1 fill:#fff3e0
+```
+
+**层次职责说明**：
+
+- **应用层** ⭐⭐：Vue组件集成、响应式处理（[详见应用层文档](./landing/event/application.md)）
+- **包装层** ⭐⭐⭐：统一事件API、监听器管理、错误处理（[详见包装层文档](./landing/event/wrapper.md)）
+- **适配层** ⭐⭐⭐：事件归一化、平台桥接、事件映射（[详见适配层文档](./landing/event/adapter.md)）
+- **平台层** ⭐⭐：TavernHelper原生事件系统（[详见平台层文档](./landing/event/platform.md)）
+
+#### 🔧 核心类型定义
+
+##### 标准事件名称
 
 ```typescript
+/** 标准事件名称枚举 */
 type StandardEventName =
+  // 消息事件
   | 'message:sent'
   | 'message:received'
+  
+  // 状态变化事件
   | 'state:changed'
+  
+  // 生成过程事件
   | 'generation:started'
   | 'generation:progress'
   | 'generation:ended'
   | 'generation:error'
-  | 'stream:token_incremental'
-  | 'stream:token_full';
+  
+  // 流式内容事件
+  | 'stream:token_incremental'  // 增量片段
+  | 'stream:token_full';         // 完整快照
+```
 
+##### 事件管理器接口
+
+```typescript
 interface EventManager {
-  /** 监听标准事件（返回取消函数） */
+  /**
+   * 监听标准事件（返回取消函数）
+   * @param eventName 标准事件名称
+   * @param callback 回调函数
+   * @returns 取消监听函数
+   */
   on(eventName: StandardEventName, callback: (payload: any) => void): () => void;
-  /** 派发自定义事件 */
+  
+  /**
+   * 一次性监听事件
+   * @param eventName 标准事件名称
+   * @param callback 回调函数
+   * @returns 取消监听函数
+   */
+  once(eventName: StandardEventName, callback: (payload: any) => void): () => void;
+  
+  /**
+   * 取消监听事件
+   * @param eventName 标准事件名称
+   * @param callback 可选的具体回调函数
+   */
+  off(eventName: StandardEventName, callback?: (payload: any) => void): void;
+  
+  /**
+   * 派发自定义事件
+   * @param eventName 事件名称
+   * @param detail 事件数据
+   */
   emit(eventName: string, detail: any): void;
+  
+  /**
+   * 清除所有监听器
+   */
+  clear(): void;
 }
 ```
 
-#### 📋 事件负载规范
+#### 📋 事件负载结构
+
+##### 生成事件负载
 
 ```typescript
+/** 生成事件负载接口 */
 interface GenerationEventPayload {
   generation_id?: string;
   prompt?: string;
   options?: any;
-  progress?: { tokens?: number; elapsed_ms?: number };
+  progress?: {
+    tokens?: number;
+    elapsed_ms?: number;
+  };
   result?: string;
-  error?: { code?: string; message: string };
+  error?: {
+    code?: string;
+    message: string;
+  };
   timestamp: number;
 }
+```
 
+##### 流式Token负载
+
+```typescript
+/** 流式Token负载接口 */
 interface StreamTokenPayload {
   generation_id?: string;
   token?: string;          // 增量单token或小片段
@@ -555,12 +992,270 @@ interface StreamTokenPayload {
 }
 ```
 
-> 📖 **完整实现参考**：[附录C - 事件系统实现](#附录c-事件系统实现)
+##### 状态变化负载
+
+```typescript
+/** 状态变化负载接口 */
+interface StateChangedPayload {
+  scope: string;
+  key: string;
+  oldValue: any;
+  newValue: any;
+  metadata: {
+    operation: string;
+    timestamp: number;
+    affectedKeys: string[];
+    platform: string;
+  };
+}
+```
+
+#### 🚀 使用示例
+
+##### 基础使用
+
+```typescript
+// 初始化
+await CharacterAPI.init();
+
+// 监听生成开始事件
+const unsubscribe = CharacterAPI.events.on('generation:started', (payload) => {
+  console.log('生成开始:', payload.generation_id);
+});
+
+// 监听流式内容
+CharacterAPI.events.on('stream:token_incremental', (payload) => {
+  console.log('增量内容:', payload.token);
+});
+
+// 监听生成完成
+CharacterAPI.events.on('generation:ended', (payload) => {
+  console.log('生成完成:', payload.result);
+});
+
+// 清理监听器
+unsubscribe();
+```
+
+##### 完整事件处理
+
+```typescript
+// 创建生成任务并监听所有事件
+async function generateWithFullObservability() {
+  const generationId = 'gen-' + Date.now();
+  let fullText = '';
+  
+  // 监听开始
+  const offStarted = CharacterAPI.events.on('generation:started', (p) => {
+    if (p.generation_id === generationId) {
+      console.log('开始生成:', p.prompt);
+    }
+  });
+  
+  // 监听进度
+  const offProgress = CharacterAPI.events.on('generation:progress', (p) => {
+    if (p.generation_id === generationId) {
+      console.log('进度:', p.progress);
+    }
+  });
+  
+  // 监听增量内容
+  const offIncremental = CharacterAPI.events.on('stream:token_incremental', (p) => {
+    if (p.generation_id === generationId) {
+      fullText += p.token;
+      console.log('当前内容:', fullText);
+    }
+  });
+  
+  // 监听完成
+  const offEnded = CharacterAPI.events.on('generation:ended', (p) => {
+    if (p.generation_id === generationId) {
+      console.log('最终结果:', p.result);
+    }
+  });
+  
+  // 监听错误
+  const offError = CharacterAPI.events.on('generation:error', (p) => {
+    if (p.generation_id === generationId) {
+      console.error('生成错误:', p.error);
+    }
+  });
+  
+  try {
+    // 执行生成
+    const result = await CharacterAPI.generation.generateWithPreset({
+      user_input: '你好',
+      stream: true,
+      generation_id: generationId
+    });
+    
+    return result;
+  } finally {
+    // 清理监听器
+    offStarted();
+    offProgress();
+    offIncremental();
+    offEnded();
+    offError();
+  }
+}
+```
+
+##### Vue组件集成
+
+```vue
+<template>
+  <div>
+    <div v-if="isGenerating">生成中... {{ progress }}%</div>
+    <div>{{ generatedText }}</div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue';
+
+const isGenerating = ref(false);
+const progress = ref(0);
+const generatedText = ref('');
+const unsubscribers = [];
+
+onMounted(() => {
+  // 监听生成开始
+  unsubscribers.push(
+    CharacterAPI.events.on('generation:started', () => {
+      isGenerating.value = true;
+      progress.value = 0;
+      generatedText.value = '';
+    })
+  );
+  
+  // 监听流式内容
+  unsubscribers.push(
+    CharacterAPI.events.on('stream:token_incremental', (payload) => {
+      generatedText.value += payload.token;
+    })
+  );
+  
+  // 监听完成
+  unsubscribers.push(
+    CharacterAPI.events.on('generation:ended', () => {
+      isGenerating.value = false;
+      progress.value = 100;
+    })
+  );
+});
+
+onUnmounted(() => {
+  // 清理所有监听器
+  unsubscribers.forEach(unsub => unsub());
+});
+</script>
+```
+
+#### 📡 事件流程图
+
+```mermaid
+sequenceDiagram
+    participant App as 应用层
+    participant Wrapper as 包装层
+    participant Adapter as 适配层
+    participant Platform as 平台层
+    
+    App->>Wrapper: on('generation:started', callback)
+    Wrapper->>Adapter: 注册事件监听
+    
+    Platform->>Adapter: 平台原生事件触发
+    Adapter->>Adapter: 事件归一化处理
+    Adapter->>Wrapper: 派发标准事件
+    Wrapper->>App: 触发回调函数
+    
+    Note over App,Platform: 流式内容处理
+    Platform->>Adapter: token增量/完整快照
+    Adapter->>Wrapper: stream:token_*事件
+    Wrapper->>App: 实时UI更新
+```
+
+#### 📋 事件分类与优先级
+
+##### 生命周期事件 ⭐⭐⭐
+
+| 事件名称 | 触发时机 | 数据载荷 | 必要性 |
+|----------|----------|----------|--------|
+| `generation:started` | 生成开始 | `{ generation_id, prompt, options, timestamp }` | ⭐⭐⭐ |
+| `generation:progress` | 生成进度更新 | `{ generation_id, progress, timestamp }` | ⭐⭐⭐ |
+| `generation:ended` | 生成完成 | `{ generation_id, result, timestamp }` | ⭐⭐⭐ |
+| `generation:error` | 生成错误 | `{ generation_id, error, timestamp }` | ⭐⭐⭐ |
+
+##### 流式内容事件 ⭐⭐⭐
+
+| 事件名称 | 触发时机 | 数据载荷 | 必要性 |
+|----------|----------|----------|--------|
+| `stream:token_incremental` | 增量内容到达 | `{ generation_id, token, index, timestamp }` | ⭐⭐⭐ |
+| `stream:token_full` | 完整快照更新 | `{ generation_id, full, timestamp }` | ⭐⭐ |
+
+##### 状态与消息事件 ⭐⭐
+
+| 事件名称 | 触发时机 | 数据载荷 | 必要性 |
+|----------|----------|----------|--------|
+| `state:changed` | 变量状态改变 | `{ scope, key, oldValue, newValue, metadata }` | ⭐⭐⭐ |
+| `message:sent` | 消息发送 | `{ message, timestamp }` | ⭐⭐ |
+| `message:received` | 消息接收 | `{ message, timestamp }` | ⭐⭐ |
+
+#### ⚠️ 平台兼容性
+
+| 平台 | 事件系统 | 流式支持 | 自定义事件 | 推荐度 |
+|------|---------|---------|-----------|--------|
+| **TavernHelper** | ✅ 完整支持 | ✅ 增量+快照 | ✅ 原生支持 | ⭐⭐⭐ |
+| **其他平台** | 🔧 通过适配器 | 🔧 可配置 | 🔧 可配置 | ⭐⭐ |
+
+**平台特性说明**：
+
+- **TavernHelper**：提供完整的 `eventOn/eventOff/eventOnce/eventEmit` API
+- **流式模式**：同时支持增量（`STREAM_TOKEN_RECEIVED_INCREMENTALLY`）和快照（`STREAM_TOKEN_RECEIVED_FULLY`）
+- **生命周期**：完整的 `GENERATION_STARTED` 和 `GENERATION_ENDED` 事件
+- **错误处理**：需在适配层补充错误事件（平台无专用错误事件）
+
+#### 💡 最佳实践
+
+**事件监听**：
+- ✅ 总是在组件卸载时清理监听器
+- ✅ 使用 `generation_id` 追踪特定生成任务
+- ✅ 处理所有错误事件，提供友好提示
+- ✅ 在 Vue 组件中使用 `onUnmounted` 自动清理
+
+**性能优化**：
+- ✅ 对高频事件使用节流或防抖
+- ✅ 使用条件监听减少不必要的事件处理
+- ✅ 批量处理流式内容更新
+- ❌ 避免在事件回调中执行耗时同步操作
+
+**错误处理**：
+- ✅ 每个监听器都应有独立的错误处理
+- ✅ 错误不应阻止其他监听器执行
+- ✅ 使用统一的错误日志记录
+- ✅ 提供用户友好的错误提示
+
+#### 📚 详细文档
+
+**核心实现文档**：
+- [`index.md`](./landing/event/index.md) - 事件系统总览与快速开始
+- [`wrapper.md`](./landing/event/wrapper.md) ⭐⭐⭐ - 包装层实现（EventManager、监听器管理）
+- [`adapter.md`](./landing/event/adapter.md) ⭐⭐⭐ - 适配层实现（事件归一化、平台桥接）
+- [`platform.md`](./landing/event/platform.md) ⭐⭐ - 底层平台特性（TavernHelper事件系统分析）
+
+**应用集成文档**：
+- [`application.md`](./landing/event/application.md) ⭐⭐ - 应用层集成（Vue组件、响应式处理）
+
+> 💡 **快速上手**：建议从 [`index.md`](./landing/event/index.md) 开始，了解整体架构后再深入具体层次的文档。
 
 ### 4.3 对话历史 (`CharacterAPI.chat`) ⭐⭐
 
 > **职责**：访问与操作对话上下文
 > **必要性**：**推荐使用** - 对话场景下的上下文管理
+
+::: warning 
+暂未实现
+:::
 
 #### ✅ 核心特性
 
@@ -576,8 +1271,6 @@ interface ChatManager {
   addMessage(message: object, position?: 'last' | 'first' | number): Promise<void>;
 }
 ```
-
-> 📖 **完整实现参考**：[附录D - 对话历史实现](#附录d-对话历史实现)
 
 ### 4.4 AI 生成 (`CharacterAPI.generation`) ⭐⭐
 
@@ -676,12 +1369,14 @@ interface GenerationManager {
 }
 ```
 
-> 📖 **完整实现参考**：[附录E - AI生成实现](#附录e-ai生成实现)
-
 ### 4.5 UI 交互 (`CharacterAPI.ui`) ⭐
 
 > **职责**：用户界面通知和交互
 > **必要性**：**可选扩展** - 增强用户体验的辅助功能
+
+::: warning 
+暂未实现
+:::
 
 #### 🔧 接口概览
 
@@ -696,6 +1391,10 @@ interface UIManager {
 > **职责**：代码执行与后端交互
 > **必要性**：**可选扩展** - 高级场景下的扩展能力
 
+::: warning 
+暂未实现
+:::
+
 #### 🔧 接口概览
 
 ```typescript
@@ -709,6 +1408,10 @@ interface RuntimeManager {
 
 > **职责**：配置管理与降级策略
 > **必要性**：**推荐使用** - 复杂场景下的参数管理和能力协商
+
+::: warning 
+暂未实现
+:::
 
 #### ✅ 核心特性
 
@@ -744,8 +1447,6 @@ interface ParameterPolicyManager {
 - **适配层**：仅做平台形状转换，不承担策略决策
 - **状态模块**：持久化参数偏好
 - **事件/日志模块**：记录校验与降级行为
-
-> 📖 **完整实现参考**：[附录F - 参数策略实现](#附录f-参数策略实现)
 
 ### 4.8 正则系统 (`CharacterAPI.regex`) ⭐⭐
 
@@ -930,7 +1631,6 @@ CharacterAPI.events.on('regex:applied', (payload) => {
 #### ⚠️ 平台兼容性
 
 - **TavernHelper**：完整支持所有特性
-- **SillyTavern**：完整支持所有特性
 - **其他平台**：通过适配器实现基础功能，可能不支持深度过滤
 
 #### 💡 最佳实践
@@ -1122,30 +1822,5 @@ if (CharacterAPI.version >= '0.2.0') {
 - **能力矩阵标准化**：建立更精细的能力发现和兼容性判断机制
 - **插件生态系统**：支持第三方扩展和插件开发
 - **性能优化**：流式处理和大数据场景的性能优化
-- **安全增强**：代码执行沙箱和权限控制机制
 
 ---
-
-## 📚 附录：完整代码实现
-
-### 附录 - 平台识别实现
-
-```typescript
-// 平台识别的标准实现模板
-interface PlatformInfo {
-  name: string;
-  version: string;
-  features: string[];
-}
-
-// SillyTavern 实现示例
-window.platformAndInformation = function(): PlatformInfo {
-  return {
-    name: "SillyTavern",
-    version: "1.11.0",
-    features: ["GroupChat", "WorldInfo", "Characters", "Presets"]
-  };
-};
-
-// 其他平台可参考此模式实现
-```
