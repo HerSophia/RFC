@@ -5,7 +5,7 @@ import { withMermaid } from "vitepress-plugin-mermaid";
 export default withMermaid({
   title: 'RFC',
   description: 'RFC规范，旨在建立角色卡跨平台 API 标准',
-  base: '/',  // 如果你的仓库名不是用户名.github.io，则需要设置为 '/仓库名/'
+  base: '/RFC/',  // GitHub Pages 仓库路径
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     outline: {
