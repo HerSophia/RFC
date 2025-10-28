@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "github.com/AgentDeskAI/browser-tools-mcp": {
+      "disabled": false,
+      "timeout": 60,
+      "command": "pnpm",
+      "args": ["dlx", "@agentdeskai/browser-tools-mcp@latest"],
+      "transportType": "stdio"
+    },
+    "fetch": {
+      "disabled": false,
+      "timeout": 60,
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "transportType": "stdio",
+      "alwaysAllow": ["fetch"]
+    }
+  }
+}
